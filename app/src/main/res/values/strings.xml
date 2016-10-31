@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">nfc</string>
+    <string name="service_name">nfc clone service</string>
+    <string name="card_title">nfc clone</string>
+    <string name="account_number">Account Number</string>
+</resources>
