@@ -1,5 +1,6 @@
 package com.landonkey.nfc;
 
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.nfc.Tag;
@@ -7,6 +8,7 @@ import android.os.Environment;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.nfc.NfcAdapter;
+import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -19,11 +21,17 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 
+import com.android.nfc.NfcDiscoveryParameters;
+import com.android.nfc.dhimpl.NativeNfcManager;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.android.nfc.NfcService;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -34,11 +42,16 @@ public class MainActivity extends AppCompatActivity {
     File sdcard = Environment.getExternalStorageDirectory();
     File uidFile = new File(sdcard,"uid.bin");
     File tagsFile = new File(sdcard,"tags.json");
-    String[] perms = { "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE" };
+    String[] perms = { "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE", "android.permission.WRITE_SECURE_SETTINGS" };
     int permsRequestCode = 200;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        try {
+            Process p = Runtime.getRuntime().exec("su");
+        } catch (IOException e) {
+
+        }
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         listViewInfo = (ListView) findViewById(R.id.scan_list);
@@ -55,12 +68,17 @@ public class MainActivity extends AppCompatActivity {
         });
 
 
-        if(!checkReadWriteExternalPermission())
+        if(!checkReadWriteExternalPermission() || !checkWriteSecureSettingsPermission())
             requestPermissions(perms, permsRequestCode);
 
         loadTags();
 
         nfcAdapter = NfcAdapter.getDefaultAdapter(this);
+
+        if(checkWriteSecureSettingsPermission()) {
+            restartNfc();
+        }
+
         if(nfcAdapter == null){
             Toast.makeText(this, "NFC NOT supported on this devices!", Toast.LENGTH_LONG).show();
             finish();
@@ -136,6 +154,10 @@ public class MainActivity extends AppCompatActivity {
 
                     saveUIDFile(t);
 
+                    if(checkWriteSecureSettingsPermission()) {
+                        restartNfc();
+                    }
+
                     Toast.makeText(getBaseContext(), "Tag Set: " + t.toString(), Toast.LENGTH_SHORT).show();
 
                     boolean exists = false;
@@ -164,9 +186,90 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void restartNfc() {
+        new Thread("restartNfc") {
+            public void run() {
+                try {
+                    Thread thread = changeNfcEnabled(false);
+                    thread.join();
+                    thread = changeNfcEnabled(true);
+                    thread.join();
+                }catch(Exception ex){
+                    Toast.makeText(MainActivity.this, ex.toString(), Toast.LENGTH_LONG).show();
+                }
+            }
+        }.start();
+    }
+
     private boolean checkReadWriteExternalPermission() {
         int res1 = this.getApplicationContext().checkCallingOrSelfPermission("android.permission.READ_EXTERNAL_STORAGE");
         int res2 = this.getApplicationContext().checkCallingOrSelfPermission("android.permission.WRITE_EXTERNAL_STORAGE");
         return (res1 == PackageManager.PERMISSION_GRANTED && res2 == PackageManager.PERMISSION_GRANTED);
+    }
+
+    private boolean checkWriteSecureSettingsPermission() {
+        int res = this.getApplicationContext().checkCallingOrSelfPermission("android.permission.WRITE_SECURE_SETTINGS");
+        return res == PackageManager.PERMISSION_GRANTED;
+    }
+
+    public Thread changeNfcEnabled(boolean enabled) {
+        Context context = this.getApplicationContext();
+        final boolean desiredState = enabled;
+
+        if (nfcAdapter == null) {
+            // NFC is not supported
+            return null;
+        }
+
+         Thread t = new Thread("toggleNFC") {
+            public void run() {
+                boolean success = false;
+                Class<?> NfcManagerClass;
+                Method setNfcEnabled, setNfcDisabled;
+                boolean Nfc;
+                if (desiredState) {
+                    try {
+                        NfcManagerClass = Class.forName("android.nfc.NfcAdapter");
+                        setNfcEnabled   = NfcManagerClass.getDeclaredMethod("nfc_enable"); //If you are not running my custom android build then this will not work...
+                        setNfcEnabled.setAccessible(true);
+                        Nfc             = (Boolean) setNfcEnabled.invoke(nfcAdapter);
+                        success         = Nfc;
+                    } catch (ClassNotFoundException e) {
+                        e.printStackTrace();
+                    } catch (NoSuchMethodException e) {
+                        e.printStackTrace();
+                    } catch (IllegalArgumentException e) {
+                        e.printStackTrace();
+                    } catch (IllegalAccessException e) {
+                        e.printStackTrace();
+                    } catch (InvocationTargetException e) {
+                        e.printStackTrace();
+                    }
+                } else {
+                    try {
+                        NfcManagerClass = Class.forName("android.nfc.NfcAdapter");
+                        setNfcDisabled  = NfcManagerClass.getDeclaredMethod("nfc_disable"); //If you are not running my custom android build then this will not work...
+                        setNfcDisabled.setAccessible(true);
+                        Nfc             = (Boolean) setNfcDisabled.invoke(nfcAdapter);
+                        success         = Nfc;
+                    } catch (ClassNotFoundException e) {
+                        e.printStackTrace();
+                    } catch (NoSuchMethodException e) {
+                        e.printStackTrace();
+                    } catch (IllegalArgumentException e) {
+                        e.printStackTrace();
+                    } catch (IllegalAccessException e) {
+                        e.printStackTrace();
+                    } catch (InvocationTargetException e) {
+                        e.printStackTrace();
+                    }
+                }
+                if (success) {
+                } else {
+                }
+            }
+        };
+        t.start();
+        return t;
     }
 }
