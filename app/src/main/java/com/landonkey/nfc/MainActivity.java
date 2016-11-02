@@ -1,5 +1,6 @@
 package com.landonkey.nfc;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -63,6 +64,7 @@ public class MainActivity extends AppCompatActivity {
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 TagClone t = (TagClone) parent.getItemAtPosition(position);
                 saveUIDFile(t);
+                restartNfc();
                 Toast.makeText(getBaseContext(), "Tag Set: " + t.toString(), Toast.LENGTH_SHORT).show();
             }
         });
@@ -75,9 +77,7 @@ public class MainActivity extends AppCompatActivity {
 
         nfcAdapter = NfcAdapter.getDefaultAdapter(this);
 
-        if(checkWriteSecureSettingsPermission()) {
-            restartNfc();
-        }
+        restartNfc();
 
         if(nfcAdapter == null){
             Toast.makeText(this, "NFC NOT supported on this devices!", Toast.LENGTH_LONG).show();
@@ -154,9 +154,9 @@ public class MainActivity extends AppCompatActivity {
 
                     saveUIDFile(t);
 
-                    if(checkWriteSecureSettingsPermission()) {
+                    //if(checkWriteSecureSettingsPermission()) {
                         restartNfc();
-                    }
+                    //}
 
                     Toast.makeText(getBaseContext(), "Tag Set: " + t.toString(), Toast.LENGTH_SHORT).show();
 
@@ -190,12 +190,26 @@ public class MainActivity extends AppCompatActivity {
         new Thread("restartNfc") {
             public void run() {
                 try {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(MainActivity.this, "NFC Restarting", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+
+
                     Thread thread = changeNfcEnabled(false);
                     thread.join();
                     thread = changeNfcEnabled(true);
                     thread.join();
+
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(MainActivity.this, "NFC Restarted", Toast.LENGTH_SHORT).show();
+                        }
+                    });
                 }catch(Exception ex){
-                    Toast.makeText(MainActivity.this, ex.toString(), Toast.LENGTH_LONG).show();
                 }
             }
         }.start();
@@ -243,6 +257,7 @@ public class MainActivity extends AppCompatActivity {
                     } catch (IllegalAccessException e) {
                         e.printStackTrace();
                     } catch (InvocationTargetException e) {
+                        //If you are here you are probably not running my android build that allows this code to run
                         e.printStackTrace();
                     }
                 } else {
@@ -261,6 +276,7 @@ public class MainActivity extends AppCompatActivity {
                     } catch (IllegalAccessException e) {
                         e.printStackTrace();
                     } catch (InvocationTargetException e) {
+                        //If you are here you are probably not running my android build that allows this code to run
                         e.printStackTrace();
                     }
                 }
